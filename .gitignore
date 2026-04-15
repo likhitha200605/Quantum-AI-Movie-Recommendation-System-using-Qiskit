@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+backend/.pytest_cache/
+backend/quantum_movies.db
+node_modules/
+frontend/.next/
+client/node_modules/
+client/dist/
+server/node_modules/
+server/.env
+.DS_Store
