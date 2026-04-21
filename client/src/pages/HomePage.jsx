@@ -7,9 +7,29 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 export default function HomePage() {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/movies").then(({ data }) => setMovies(data)).finally(() => setLoading(false));
+    let alive = true;
+    async function run() {
+      setLoading(true);
+      setError("");
+      try {
+        const { data } = await api.get("/movies");
+        if (alive) setMovies(data || []);
+      } catch (err) {
+        if (alive) {
+          setMovies([]);
+          setError(err?.response?.data?.message || "Failed to load homepage movies.");
+        }
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+    run();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const featured = movies.find((m) => m.featured) || movies[0];
@@ -26,6 +46,7 @@ export default function HomePage() {
       )}
       <section>
         <h2 className="mb-4 text-2xl font-semibold">Trending Movies</h2>
+        {error && <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-red-200">{error}</div>}
         {loading ? <LoadingSkeleton rows={4} /> : <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">{movies.map((m) => <MovieCard key={m._id} movie={m} />)}</div>}
       </section>
     </div>

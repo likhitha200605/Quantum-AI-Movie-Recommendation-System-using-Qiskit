@@ -5,6 +5,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(false);
 
   async function login(email, password) {
     const { data } = await api.post("/auth/login", { email, password });
@@ -19,20 +20,24 @@ export function AuthProvider({ children }) {
   }
 
   async function loadMe() {
+    setLoadingUser(true);
     try {
       const { data } = await api.get("/users/me");
       setUser(data.user);
     } catch {
       setUser(null);
+    } finally {
+      setLoadingUser(false);
     }
   }
 
   function logout() {
     localStorage.removeItem("token");
     setUser(null);
+    window.location.href = "/profile";
   }
 
-  return <AuthContext.Provider value={{ user, login, signup, loadMe, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loadingUser, login, signup, loadMe, logout, setUser }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

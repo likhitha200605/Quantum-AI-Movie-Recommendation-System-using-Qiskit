@@ -11,11 +11,13 @@ const QuantumLabPage = lazy(() => import("./pages/QuantumLabPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const MovieDetailsPage = lazy(() => import("./pages/MovieDetailsPage"));
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 
 export default function App() {
   const { loadMe } = useAuth();
   useEffect(() => {
     loadMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -27,6 +29,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/movies" element={<MoviesPage />} />
             <Route path="/movies/:id" element={<MovieDetailsPage />} />
+            <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/recommendations" element={<RecommendationsPage />} />
             <Route path="/quantum-lab" element={<QuantumLabPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />

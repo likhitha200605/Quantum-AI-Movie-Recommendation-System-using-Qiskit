@@ -15,6 +15,18 @@ function genreVector(genres, allGenres) {
 }
 
 export async function computeRecommendations(userId, knobs = {}) {
+  if (!userId) {
+    const trending = await Movie.find().sort({ trendingScore: -1, createdAt: -1 }).limit(16).lean();
+    return trending.map((movie, idx) => ({
+      ...movie,
+      score: 1 - idx * 0.01,
+      classicalScore: 1 - idx * 0.01,
+      quantumScore: 1 - idx * 0.01,
+      explainability: "Trending now based on global watch behavior.",
+      quantumMeta: { similarity: 1 - idx * 0.01 },
+    }));
+  }
+
   const [movies, ratings, history] = await Promise.all([
     Movie.find().lean(),
     Rating.find({ user: userId }).populate("movie").lean(),
@@ -31,21 +43,38 @@ export async function computeRecommendations(userId, knobs = {}) {
   }
 
   const userVector = normalize(allGenres.map((g) => likedGenres[g] || 0));
-  const watched = new Set(ratings.map((r) => String(r.movie?._id)));
+  const watched = new Set([
+    ...ratings.map((r) => String(r.movie?._id)),
+    ...history.map((h) => String(h.movie?._id)),
+  ]);
+  const watchedTitles = [
+    ...new Set([...ratings.map((r) => r.movie?.title), ...history.map((h) => h.movie?.title)].filter(Boolean)),
+  ];
+  const hasPreferenceSignal = userVector.some((value) => value > 0);
 
   const scored = [];
   for (const movie of movies) {
     if (watched.has(String(movie._id))) continue;
     const movieVector = genreVector(movie.genres || [], allGenres);
-    const classicalScore = userVector.reduce((acc, u, i) => acc + u * movieVector[i], 0);
-    const quantum = await scoreQuantumSimilarity(userVector, movieVector, knobs);
+    const preferenceScore = userVector.reduce((acc, u, i) => acc + u * movieVector[i], 0);
+    // If user has no behavior signal yet, classical model falls back to popularity.
+    const popularityScore = ((movie.trendingScore || 0) / 100) * 0.7 + ((movie.ratingAvg || 0) / 5) * 0.3;
+    const classicalScore = hasPreferenceSignal ? preferenceScore : popularityScore;
+    let quantum = { similarity: classicalScore };
+    try {
+      quantum = await scoreQuantumSimilarity(userVector, movieVector, knobs);
+    } catch {
+      quantum = { similarity: classicalScore };
+    }
     const hybrid = (1 - (knobs.exploration ?? 0.35)) * quantum.similarity + (knobs.exploration ?? 0.35) * classicalScore;
     scored.push({
       ...movie,
       score: hybrid,
       classicalScore,
       quantumScore: quantum.similarity,
-      explainability: `Because you watched ${Object.keys(likedGenres).slice(0, 2).join(" and ")} content.`,
+      explainability: watchedTitles.length
+        ? `Because you watched ${watchedTitles.slice(0, 2).join(" and ")}.`
+        : "Because your recent behavior matches this movie profile.",
       quantumMeta: quantum,
     });
   }
