@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Movie from "../models/Movie.js";
 import Rating from "../models/Rating.js";
 
 export async function upsertRating(req, res) {
@@ -30,6 +31,8 @@ export async function upsertRating(req, res) {
     const averageRating = stats[0]?.averageRating || 0;
     const totalRatings = stats[0]?.totalRatings || 0;
 
+    await Movie.findByIdAndUpdate(movieId, { ratingAvg: averageRating });
+
     return res.json({
       movieId,
       averageRating,
@@ -38,6 +41,23 @@ export async function upsertRating(req, res) {
     });
   } catch (err) {
     return res.status(500).json({ message: "Failed to save rating", detail: err.message });
+  }
+}
+
+export async function getUserRatings(req, res) {
+  try {
+    const ratings = await Rating.find({ user: req.user.id })
+      .select("movie score updatedAt")
+      .lean();
+
+    const mapped = ratings.reduce((acc, item) => {
+      acc[String(item.movie)] = item.score;
+      return acc;
+    }, {});
+
+    return res.json({ ratings: mapped });
+  } catch (err) {
+    return res.status(500).json({ message: "Failed to fetch user ratings", detail: err.message });
   }
 }
 

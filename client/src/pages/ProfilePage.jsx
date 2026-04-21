@@ -1,31 +1,19 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useWatchlist } from "../context/WatchlistContext";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import api from "../services/api";
 
 export default function ProfilePage() {
   const { user, login, signup, loadMe, setUser, loadingUser } = useAuth();
+  const { watchlist, loadingWatchlist } = useWatchlist();
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [editForm, setEditForm] = useState({ name: "", email: "" });
   const [editMode, setEditMode] = useState(false);
-  const [watchlist, setWatchlist] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let alive = true;
-    async function run() {
-      await loadMe();
-      try {
-        const { data } = await api.get("/movies/watchlist");
-        if (alive) setWatchlist(data.watchlist || []);
-      } catch {
-        if (alive) setWatchlist([]);
-      }
-    }
-    run();
-    return () => {
-      alive = false;
-    };
+    loadMe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -105,7 +93,11 @@ export default function ProfilePage() {
         </div>
       </div>
       <h2 className="text-xl font-semibold">Watchlist</h2>
-      <div className="grid gap-3 md:grid-cols-3">{watchlist.map((m) => <div key={m._id} className="glass rounded-xl p-3">{m.title}</div>)}</div>
+      {loadingWatchlist ? (
+        <LoadingSkeleton rows={2} />
+      ) : (
+        <div className="grid gap-3 md:grid-cols-3">{watchlist.map((m) => <div key={m._id} className="glass rounded-xl p-3">{m.title}</div>)}</div>
+      )}
     </div>
   );
 }

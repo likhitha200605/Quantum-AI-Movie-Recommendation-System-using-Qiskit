@@ -8,6 +8,8 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import movieRoutes from "./routes/movieRoutes.js";
 import ratingRoutes from "./routes/ratingRoutes.js";
 import recommendationRoutes from "./routes/recommendationRoutes.js";
+import trackRoutes from "./routes/trackRoutes.js";
+import userDashboardRoutes from "./routes/userDashboardRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 
 dotenv.config();
@@ -24,6 +26,8 @@ app.use("/api/ratings", ratingRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/track", trackRoutes);
+app.use("/api/user", userDashboardRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

@@ -31,17 +31,24 @@ export default function SearchResultsPage() {
 
   useEffect(() => {
     let alive = true;
+    let debounceTimer;
+
     async function run() {
       if (!q) {
         setItems([]);
         setLoading(false);
         return;
       }
+
       setLoading(true);
       setError("");
       try {
-        const { data } = await api.get("/movies", { params: { q } });
-        if (alive) setItems(data || []);
+        console.log("[search] requesting query:", q);
+        const { data } = await api.get("/movies/search", { params: { q } });
+        console.log("[search] response count:", Array.isArray(data) ? data.length : 0);
+        if (alive) {
+          setItems(data || []);
+        }
       } catch (err) {
         if (alive) {
           setItems([]);
@@ -51,9 +58,13 @@ export default function SearchResultsPage() {
         if (alive) setLoading(false);
       }
     }
-    run();
+    debounceTimer = setTimeout(() => {
+      run();
+    }, 300);
+
     return () => {
       alive = false;
+      clearTimeout(debounceTimer);
     };
   }, [q]);
 
@@ -66,7 +77,7 @@ export default function SearchResultsPage() {
         Query: <span className="font-semibold text-white">{q || "N/A"}</span>
       </p>
       {error && <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
-      {!error && items.length === 0 && <div className="rounded-xl bg-white/5 p-4 text-slate-300">No movies found.</div>}
+      {!error && q && items.length === 0 && <div className="rounded-xl bg-white/5 p-4 text-slate-300">No results found.</div>}
       <div className="grid gap-3">
         {items.map((movie) => (
           <Link

@@ -8,6 +8,40 @@ function escapeRegex(value = "") {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeText(value = "") {
+  return String(value).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function scoreSearchRelevance(movie, query) {
+  const q = normalizeText(query);
+  const title = normalizeText(movie?.title || "");
+  const genres = Array.isArray(movie?.genres) ? movie.genres.map((g) => normalizeText(g)).join(" ") : "";
+  const tags = Array.isArray(movie?.tags) ? movie.tags.map((t) => normalizeText(t)).join(" ") : "";
+  const haystack = `${title} ${genres} ${tags}`.trim();
+  const terms = [...new Set(q.split(" ").filter(Boolean))];
+
+  let score = 0;
+  if (!q) return score;
+  if (title === q) score += 1000;
+  else if (title.startsWith(q)) score += 700;
+  else if (title.includes(q)) score += 450;
+  if (haystack.includes(q)) score += 120;
+
+  for (const term of terms) {
+    if (!term) continue;
+    if (title === term) score += 150;
+    else if (title.startsWith(term)) score += 100;
+    else if (title.includes(term)) score += 60;
+    if (genres.includes(term)) score += 35;
+    if (tags.includes(term)) score += 25;
+    if (haystack.includes(term)) score += 10;
+  }
+
+  score += Number(movie?.trendingScore || 0) * 0.1;
+  score += Number(movie?.ratingAvg || 0) * 2;
+  return score;
+}
+
 const KNOWN_GENRES = [
   "action",
   "adventure",
@@ -79,101 +113,231 @@ async function fetchTmdbMovies(query) {
   }));
 }
 
+async function fetchYtsMovies({ page = 1, limit = 20, genre = "", query = "" } = {}) {
+  const params = {
+    page: Math.max(Number(page) || 1, 1),
+    limit: Math.min(Math.max(Number(limit) || 1, 1), 50),
+    sort_by: "download_count",
+    order_by: "desc",
+  };
+  if (genre) params.genre = String(genre).toLowerCase();
+  if (query) params.query_term = query;
+
+  const { data } = await axios.get("https://yts.mx/api/v2/list_movies.json", { params, timeout: 10000 });
+  const movies = (data?.data?.movies || []).map((item) => ({
+    _id: `yts-${item.id}`,
+    ytsId: item.id,
+    title: item.title,
+    year: item.year,
+    genres: item.genres || [],
+    posterUrl: item.medium_cover_image || item.large_cover_image || "",
+    trailerUrl: item.yt_trailer_code ? `https://www.youtube.com/embed/${item.yt_trailer_code}` : "",
+    description: item.summary || "",
+    ratingAvg: Number(item.rating || 0) / 2,
+    source: "yts",
+  }));
+
+  return {
+    movies,
+    totalPages: Math.max(Number(data?.data?.movie_count || 0) > 0 ? Math.ceil(Number(data.data.movie_count) / params.limit) : 0, 1),
+  };
+}
+
+async function fetchYtsMovieDetails(ytsId) {
+  const { data } = await axios.get("https://yts.mx/api/v2/movie_details.json", {
+    params: { movie_id: ytsId, with_images: true, with_cast: true },
+    timeout: 10000,
+  });
+  const movie = data?.data?.movie;
+  if (!movie) return null;
+  return {
+    _id: `yts-${movie.id}`,
+    ytsId: movie.id,
+    title: movie.title,
+    year: movie.year,
+    genres: movie.genres || [],
+    posterUrl: movie.large_cover_image || movie.medium_cover_image || "",
+    trailerUrl: movie.yt_trailer_code ? `https://www.youtube.com/embed/${movie.yt_trailer_code}` : "",
+    description: movie.description_full || movie.summary || "",
+    ratingAvg: Number(movie.rating || 0) / 2,
+    cast: Array.isArray(movie.cast) ? movie.cast.map((c) => c.name).filter(Boolean) : [],
+    source: "yts",
+  };
+}
+
+async function fetchTmdbPopularPage(page = 1, limit = 12) {
+  const tmdbApiKey = process.env.TMDB_API_KEY;
+  if (!tmdbApiKey) return { movies: [], totalPages: 0 };
+
+  const safePage = Math.max(Number(page) || 1, 1);
+  const { data } = await axios.get("https://api.themoviedb.org/3/movie/popular", {
+    params: { api_key: tmdbApiKey, page: safePage },
+  });
+
+  const movies = (data?.results || []).slice(0, limit).map((item) => ({
+    _id: `tmdb-${item.id}`,
+    tmdbId: item.id,
+    title: item.title,
+    year: item.release_date ? Number(item.release_date.slice(0, 4)) : undefined,
+    genres: [],
+    posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "",
+    trailerUrl: "",
+    description: item.overview || "",
+    ratingAvg: Number(item.vote_average || 0) / 2,
+    source: "tmdb",
+  }));
+
+  return {
+    movies,
+    totalPages: Number(data?.total_pages || 0),
+  };
+}
+
+async function fetchTmdbMovieDetails(tmdbId) {
+  const tmdbApiKey = process.env.TMDB_API_KEY;
+  if (!tmdbApiKey) return null;
+
+  const { data } = await axios.get(`https://api.themoviedb.org/3/movie/${tmdbId}`, {
+    params: { api_key: tmdbApiKey },
+  });
+
+  return {
+    _id: `tmdb-${data.id}`,
+    tmdbId: data.id,
+    title: data.title,
+    year: data.release_date ? Number(data.release_date.slice(0, 4)) : undefined,
+    genres: Array.isArray(data.genres) ? data.genres.map((g) => g.name) : [],
+    posterUrl: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : "",
+    trailerUrl: "",
+    description: data.overview || "",
+    ratingAvg: Number(data.vote_average || 0) / 2,
+    cast: [],
+    source: "tmdb",
+  };
+}
+
 export async function listMovies(req, res) {
   try {
-    const { q = "", genre = "", year = "", minRating = 0 } = req.query;
-    const cleanQuery = String(q).trim();
-    const cleanGenre = String(genre).trim();
-    const cleanYear = Number(year) || null;
-    const minRatingNum = Number(minRating) || 0;
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 12, 1), 50);
+    const genre = String(req.query.genre || "").trim();
 
-    const parsed = parseSearchIntent(cleanQuery);
-    const intentGenres = parsed.genres;
-    const keywords = parsed.keywords;
+    const filter = genre
+      ? { genres: { $elemMatch: { $regex: `^${escapeRegex(genre)}$`, $options: "i" } } }
+      : {};
 
-    const baseFilter = { ratingAvg: { $gte: minRatingNum } };
-    const explicitGenreFilter = cleanGenre
-      ? { genres: { $elemMatch: { $regex: `^${escapeRegex(cleanGenre)}$`, $options: "i" } } }
-      : null;
-    const intentGenreFilter = intentGenres.length
-      ? { genres: { $in: intentGenres.map((g) => new RegExp(`^${escapeRegex(g)}$`, "i")) } }
-      : null;
-    const yearFilter = cleanYear ? { year: cleanYear } : null;
+    const totalItems = await Movie.countDocuments(filter);
+    const totalPagesFromDb = Math.max(Math.ceil(totalItems / limit), 1);
+    const safePage = Math.min(page, totalPagesFromDb);
+    const skip = (safePage - 1) * limit;
 
-    const keywordOr = cleanQuery
-      ? [
-          { title: { $regex: escapeRegex(cleanQuery), $options: "i" } },
-          { genres: { $elemMatch: { $regex: escapeRegex(cleanQuery), $options: "i" } } },
-          { tags: { $elemMatch: { $regex: escapeRegex(cleanQuery), $options: "i" } } },
-          ...keywords.flatMap((kw) => [
-            { title: { $regex: escapeRegex(kw), $options: "i" } },
-            { genres: { $elemMatch: { $regex: escapeRegex(kw), $options: "i" } } },
-            { tags: { $elemMatch: { $regex: escapeRegex(kw), $options: "i" } } },
-          ]),
-        ]
-      : [];
-    const queryFilter = keywordOr.length ? { $or: keywordOr } : {};
+    const dbMovies = await Movie.find(filter)
+      .sort({ trendingScore: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
-    // 1) Strict match: apply exact requested filters (genre + year)
-    const strictFilter = {
-      ...baseFilter,
-      ...queryFilter,
-      ...(explicitGenreFilter || intentGenreFilter || {}),
-      ...(yearFilter || {}),
-    };
-    let matchType = "strict";
-    let movies = await Movie.find(strictFilter).sort({ trendingScore: -1, createdAt: -1 });
+    let movies = dbMovies;
+    let totalPages = totalPagesFromDb;
 
-    // 2) Related DB results: if strict is empty, relax to "genre OR year" while keeping title/minRating.
-    if (!movies.length && (explicitGenreFilter || intentGenreFilter || yearFilter)) {
-      matchType = "related";
-      const relatedFilter = {
-        ...baseFilter,
-        ...queryFilter,
-        $or: [explicitGenreFilter, intentGenreFilter, yearFilter].filter(Boolean),
-      };
-      movies = await Movie.find(relatedFilter).sort({ trendingScore: -1, createdAt: -1 }).limit(24);
+    // Expand catalog with dynamic providers so scrolling keeps loading new movies.
+    {
+      try {
+        const yts = await fetchYtsMovies({ page, limit, genre });
+        const tmdb = await fetchTmdbPopularPage(page, limit);
+        const seen = new Set();
+        movies = [...dbMovies, ...tmdb.movies, ...yts.movies].filter((item) => {
+          const key = `${String(item.title || "").toLowerCase()}-${item.year || ""}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        totalPages = Math.max(totalPagesFromDb, tmdb.totalPages || 1, yts.totalPages || 1);
+      } catch {
+        movies = dbMovies;
+        totalPages = totalPagesFromDb;
+      }
     }
 
-    // Always attempt TMDB for dynamic catalog expansion when API key exists.
+    return res.json({
+      movies,
+      currentPage: page,
+      totalPages,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: "Failed to load movies", detail: err.message });
+  }
+}
+
+export async function searchMovies(req, res) {
+  try {
+    const query = String(req.query.q || "").trim();
+    if (!query) return res.json([]);
+
+    const cleanedQuery = query.toLowerCase().replace("movie", "").replace("film", "").trim();
+    const effectiveQuery = cleanedQuery || query.toLowerCase();
+    const terms = [...new Set(effectiveQuery.split(/\s+/).filter(Boolean))];
+
+    console.log("[movies/search] query:", query, "cleaned:", effectiveQuery);
+
+    const orFilters = [
+      { title: { $regex: effectiveQuery, $options: "i" } },
+      { genres: { $elemMatch: { $regex: effectiveQuery, $options: "i" } } },
+      { tags: { $elemMatch: { $regex: effectiveQuery, $options: "i" } } },
+      ...terms.flatMap((term) => [
+        { title: { $regex: term, $options: "i" } },
+        { genres: { $elemMatch: { $regex: term, $options: "i" } } },
+        { tags: { $elemMatch: { $regex: term, $options: "i" } } },
+      ]),
+    ];
+
+    const dbMovies = await Movie.find({ $or: orFilters }).sort({ trendingScore: -1, createdAt: -1 });
+
     let tmdbMovies = [];
+    let ytsMovies = [];
     try {
-      tmdbMovies = await fetchTmdbMovies(cleanQuery);
+      tmdbMovies = await fetchTmdbMovies(query);
     } catch {
       tmdbMovies = [];
     }
+    try {
+      ytsMovies = (await fetchYtsMovies({ page: 1, limit: 20, query })).movies;
+    } catch {
+      ytsMovies = [];
+    }
 
-    // Merge without duplicates by title+year so local curated items still appear first.
     const seen = new Set();
-    const merged = [...movies, ...tmdbMovies].filter((item) => {
+    const merged = [...dbMovies, ...tmdbMovies, ...ytsMovies].filter((item) => {
       const key = `${String(item.title || "").toLowerCase()}-${item.year || ""}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    if (merged.length > 0) {
-      res.set("x-match-type", matchType);
-      return res.json(merged);
-    }
+    merged.sort((a, b) => scoreSearchRelevance(b, query) - scoreSearchRelevance(a, query));
 
-    // 3) Final fallback only when no genre/year was requested.
-    if (!cleanGenre && !cleanYear && !cleanQuery) {
-      const fallback = await Movie.find(baseFilter).sort({ trendingScore: -1, createdAt: -1 }).limit(24);
-      res.set("x-match-type", "fallback");
-      return res.json(fallback);
-    }
-
-    // With genre/year filters, return empty so frontend can show "no related movies".
-    res.set("x-match-type", "none");
-    return res.json([]);
+    console.log("[movies/search] result_count:", merged.length);
+    return res.json(merged);
   } catch (err) {
-    return res.status(500).json({ message: "Failed to load movies", detail: err.message });
+    return res.status(500).json({ message: "Failed to search movies", detail: err.message });
   }
 }
 
 export async function movieDetails(req, res) {
   try {
+    if (String(req.params.id).startsWith("yts-")) {
+      const ytsId = String(req.params.id).replace("yts-", "");
+      const ytsMovie = await fetchYtsMovieDetails(ytsId);
+      if (!ytsMovie) return res.status(404).json({ message: "Movie not found" });
+      return res.json(ytsMovie);
+    }
+
+    if (String(req.params.id).startsWith("tmdb-")) {
+      const tmdbId = String(req.params.id).replace("tmdb-", "");
+      const tmdbMovie = await fetchTmdbMovieDetails(tmdbId);
+      if (!tmdbMovie) return res.status(404).json({ message: "Movie not found" });
+      return res.json(tmdbMovie);
+    }
+
     const cacheKey = `movie:${req.params.id}`;
     if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
     const movie = await Movie.findById(req.params.id);
@@ -253,25 +417,52 @@ export async function suggestions(req, res) {
   try {
     const { q = "" } = req.query;
     if (!q.trim()) return res.json([]);
-    const parsed = parseSearchIntent(q);
+    const raw = String(q).trim();
+    const cleaned = raw.toLowerCase().replace("movie", "").replace("film", "").trim();
+    const effective = cleaned || raw.toLowerCase();
+    const terms = [...new Set(effective.split(/\s+/).filter(Boolean))];
+    const parsed = parseSearchIntent(effective);
     const intents = parsed.genres;
-    const keywords = parsed.keywords;
+
     const queryOr = [
-      { title: { $regex: escapeRegex(q), $options: "i" } },
-      { genres: { $elemMatch: { $regex: escapeRegex(q), $options: "i" } } },
-      { tags: { $elemMatch: { $regex: escapeRegex(q), $options: "i" } } },
-      ...keywords.flatMap((kw) => [
+      { title: { $regex: escapeRegex(effective), $options: "i" } },
+      { genres: { $elemMatch: { $regex: escapeRegex(effective), $options: "i" } } },
+      { tags: { $elemMatch: { $regex: escapeRegex(effective), $options: "i" } } },
+      ...terms.flatMap((kw) => [
         { title: { $regex: escapeRegex(kw), $options: "i" } },
         { genres: { $elemMatch: { $regex: escapeRegex(kw), $options: "i" } } },
         { tags: { $elemMatch: { $regex: escapeRegex(kw), $options: "i" } } },
       ]),
       ...(intents.length ? [{ genres: { $in: intents.map((g) => new RegExp(`^${escapeRegex(g)}$`, "i")) } }] : []),
     ];
-    const movies = await Movie.find({ $or: queryOr })
+
+    const dbMovies = await Movie.find({ $or: queryOr })
       .select("_id title year posterUrl")
       .sort({ trendingScore: -1 })
       .limit(10);
-    return res.json(movies);
+
+    let tmdbMovies = [];
+    try {
+      tmdbMovies = (await fetchTmdbMovies(raw)).map((item) => ({
+        _id: item._id,
+        title: item.title,
+        year: item.year,
+        posterUrl: item.posterUrl,
+      }));
+    } catch {
+      tmdbMovies = [];
+    }
+
+    const seen = new Set();
+    const merged = [...dbMovies, ...tmdbMovies].filter((item) => {
+      const key = `${String(item.title || "").toLowerCase()}-${item.year || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    merged.sort((a, b) => scoreSearchRelevance(b, raw) - scoreSearchRelevance(a, raw));
+
+    return res.json(merged.slice(0, 10));
   } catch (err) {
     return res.status(500).json({ message: "Failed to load suggestions", detail: err.message });
   }

@@ -3,15 +3,17 @@ import { Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useRatings } from "../context/RatingsContext";
 import api from "../services/api";
 
 export default function MovieCard({ movie }) {
   const { user } = useAuth();
+  const { ratingsByMovieId, loadingRatings, saveRating } = useRatings();
   const [averageRating, setAverageRating] = useState(Number(movie?.ratingAvg || 0));
   const [totalRatings, setTotalRatings] = useState(0);
-  const [yourRating, setYourRating] = useState(null);
   const [hoverRating, setHoverRating] = useState(0);
   const [saving, setSaving] = useState(false);
+  const yourRating = ratingsByMovieId[movie?._id] ?? null;
 
   const activeRating = useMemo(() => hoverRating || yourRating || 0, [hoverRating, yourRating]);
 
@@ -24,12 +26,10 @@ export default function MovieCard({ movie }) {
         if (!alive) return;
         setAverageRating(Number(data?.averageRating || 0));
         setTotalRatings(Number(data?.totalRatings || 0));
-        setYourRating(data?.yourRating ?? null);
       } catch {
         if (!alive) return;
         setAverageRating(Number(movie?.ratingAvg || 0));
         setTotalRatings(0);
-        setYourRating(null);
       }
     }
     loadRating();
@@ -45,7 +45,7 @@ export default function MovieCard({ movie }) {
     }
     if (!movie?._id || String(movie._id).startsWith("tmdb-")) return;
 
-    const previousRating = yourRating;
+    const previousRating = ratingsByMovieId[movie._id] ?? null;
     const previousTotal = totalRatings;
     const previousAverage = averageRating;
     const hadPrevious = typeof previousRating === "number" && previousRating > 0;
@@ -55,17 +55,14 @@ export default function MovieCard({ movie }) {
       : (previousAverage * previousTotal + score) / Math.max(previousTotal + 1, 1);
 
     setSaving(true);
-    setYourRating(score);
     setTotalRatings(optimisticTotal);
     setAverageRating(optimisticAverage);
 
     try {
-      const { data } = await api.post("/ratings", { movieId: movie._id, rating: score });
+      const data = await saveRating(movie._id, score);
       setAverageRating(Number(data?.averageRating || optimisticAverage));
       setTotalRatings(Number(data?.totalRatings || optimisticTotal));
-      setYourRating(data?.yourRating ?? score);
     } catch {
-      setYourRating(previousRating);
       setTotalRatings(previousTotal);
       setAverageRating(previousAverage);
       alert("Unable to save your rating right now.");
@@ -97,7 +94,7 @@ export default function MovieCard({ movie }) {
                 transition={{ duration: 0.15 }}
                 onMouseEnter={() => setHoverRating(score)}
                 onClick={() => rate(score)}
-                disabled={saving}
+                disabled={saving || loadingRatings}
                 className="rounded p-0.5 disabled:opacity-60"
                 aria-label={`Rate ${score} stars`}
               >
@@ -106,7 +103,7 @@ export default function MovieCard({ movie }) {
             );
           })}
         </div>
-        <p className="text-xs text-slate-300">Your rating: {yourRating ?? "Not rated yet"}</p>
+        <p className="text-xs text-slate-300">Your rating: {loadingRatings ? "Loading..." : yourRating ?? "Not rated yet"}</p>
         <Link className="inline-block rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-1 text-sm" to={`/movies/${movie._id}`}>View Details</Link>
       </div>
     </motion.div>

@@ -79,5 +79,21 @@ export async function computeRecommendations(userId, knobs = {}) {
     });
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, 16);
+  if (scored.length > 0) {
+    return scored.slice(0, 16);
+  }
+
+  // Fallback for small catalogs: still return ranked items so UI never appears "stuck".
+  return movies
+    .slice()
+    .sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0))
+    .slice(0, 16)
+    .map((movie, idx) => ({
+      ...movie,
+      score: 1 - idx * 0.01,
+      classicalScore: 1 - idx * 0.01,
+      quantumScore: 1 - idx * 0.01,
+      explainability: "No unseen items left; showing strongest matches from your catalog.",
+      quantumMeta: { similarity: 1 - idx * 0.01, fallback: true },
+    }));
 }

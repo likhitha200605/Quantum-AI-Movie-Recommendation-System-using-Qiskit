@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { trackSearchAction } from "../services/tracking";
 
 const links = ["Home", "Movies", "Recommendations", "Quantum Lab", "Dashboard", "Profile"];
 
@@ -50,6 +51,15 @@ export default function Navbar() {
   }, [query]);
 
   useEffect(() => {
+    const clean = query.trim();
+    if (!clean) return;
+    const t = setTimeout(() => {
+      trackSearchAction({ userId: user?._id, query: clean });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [query, user?._id]);
+
+  useEffect(() => {
     function onDocumentClick(event) {
       if (!profileMenuRef.current?.contains(event.target)) {
         setProfileMenuOpen(false);
@@ -64,6 +74,7 @@ export default function Navbar() {
     e.preventDefault();
     const clean = query.trim();
     if (!clean) return;
+    trackSearchAction({ userId: user?._id, query: clean });
     setSuggestions([]);
     navigate(`/search?q=${encodeURIComponent(clean)}`);
   }

@@ -9,17 +9,21 @@ export default function QuantumLabPage() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [hasRun, setHasRun] = useState(false);
 
   async function run() {
     setLoading(true);
     setError("");
     try {
+      console.log("[quantum-lab] run with knobs:", { noise, entanglement, exploration });
       const { data } = await api.get("/recommendations", { params: { noise, entanglement, exploration } });
       setResults(Array.isArray(data) ? data : []);
+      console.log("[quantum-lab] received results:", Array.isArray(data) ? data.length : 0);
     } catch (err) {
       setResults([]);
       setError(err?.response?.data?.message || "Failed to run quantum recommendation.");
     } finally {
+      setHasRun(true);
       setLoading(false);
     }
   }
@@ -44,6 +48,7 @@ export default function QuantumLabPage() {
               <li key={`q-${item._id}`}>{item.title} - {(item.quantumScore || 0).toFixed(3)}</li>
             ))}
           </ul>
+          {hasRun && !loading && results.length === 0 && <p className="text-sm text-slate-300">No recommendations generated for current data.</p>}
         </div>
         <div className="glass rounded-xl p-4">
           <h3 className="mb-2 font-semibold">Classical Recommendation Output</h3>
@@ -55,6 +60,7 @@ export default function QuantumLabPage() {
                 <li key={`c-${item._id}`}>{item.title} - {(item.classicalScore || 0).toFixed(3)}</li>
               ))}
           </ul>
+          {hasRun && !loading && results.length === 0 && <p className="text-sm text-slate-300">No recommendations generated for current data.</p>}
         </div>
       </div>
       <QuantumComparisonChart items={results.slice(0, 8)} />
