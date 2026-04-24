@@ -1,6 +1,6 @@
-import Movie from "../models/Movie.js";
 import Rating from "../models/Rating.js";
 import UserBehavior from "../models/UserBehavior.js";
+import { getTmdbMovie } from "../utils/tmdb.js";
 
 function buildDefaultDashboard() {
   return {
@@ -27,8 +27,10 @@ async function computeDashboardForUser(userId) {
   const watchTime = trailerClicks.length * 2;
 
   const watchedIds = [...new Set([...watchlist, ...trailerClicks].map((id) => String(id)))];
+  
+  // Use TMDB API instead of local DB
   const watchedMovies = watchedIds.length
-    ? await Movie.find({ _id: { $in: watchedIds } }).select("genres").lean()
+    ? (await Promise.all(watchedIds.map(id => getTmdbMovie(id)))).filter(Boolean)
     : [];
 
   const genreMap = {};

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import Movie from "../models/Movie.js";
+
 import Rating from "../models/Rating.js";
 
 export async function upsertRating(req, res) {
@@ -17,9 +17,8 @@ export async function upsertRating(req, res) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const movieObjectId = new mongoose.Types.ObjectId(movieId);
     const stats = await Rating.aggregate([
-      { $match: { movie: movieObjectId } },
+      { $match: { movie: movieId } },
       {
         $group: {
           _id: "$movie",
@@ -30,8 +29,6 @@ export async function upsertRating(req, res) {
     ]);
     const averageRating = stats[0]?.averageRating || 0;
     const totalRatings = stats[0]?.totalRatings || 0;
-
-    await Movie.findByIdAndUpdate(movieId, { ratingAvg: averageRating });
 
     return res.json({
       movieId,
@@ -64,9 +61,8 @@ export async function getUserRatings(req, res) {
 export async function getMovieRatings(req, res) {
   try {
     const { movieId } = req.params;
-    const movieObjectId = new mongoose.Types.ObjectId(movieId);
     const stats = await Rating.aggregate([
-      { $match: { movie: movieObjectId } },
+      { $match: { movie: movieId } },
       {
         $group: {
           _id: "$movie",
@@ -87,5 +83,39 @@ export async function getMovieRatings(req, res) {
     return res.json({ movieId, averageRating, totalRatings, yourRating });
   } catch (err) {
     return res.status(500).json({ message: "Failed to fetch movie ratings", detail: err.message });
+  }
+}
+
+export async function removeRating(req, res) {
+  try {
+    const { movieId } = req.params;
+    if (!movieId) {
+      return res.status(400).json({ message: "movieId is required" });
+    }
+
+    await Rating.findOneAndDelete({ user: req.user.id, movie: movieId });
+
+    const stats = await Rating.aggregate([
+      { $match: { movie: movieId } },
+      {
+        $group: {
+          _id: "$movie",
+          averageRating: { $avg: "$score" },
+          totalRatings: { $sum: 1 },
+        },
+      },
+    ]);
+    const averageRating = stats[0]?.averageRating || 0;
+    const totalRatings = stats[0]?.totalRatings || 0;
+
+    return res.json({
+      movieId,
+      averageRating,
+      totalRatings,
+      yourRating: null,
+      message: "Rating removed successfully",
+    });
+  } catch (err) {
+    return res.status(500).json({ message: "Failed to remove rating", detail: err.message });
   }
 }

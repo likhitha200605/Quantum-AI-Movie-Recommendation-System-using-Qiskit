@@ -1,109 +1,67 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
-import MovieCard from "../components/MovieCard";
+import MovieRow from "../components/MovieRow";
 import api from "../services/api";
-import LoadingSkeleton from "../components/LoadingSkeleton";
-
-const PAGE_LIMIT = 8;
+import { Link } from "react-router-dom";
 
 export default function HomePage() {
-  const [movies, setMovies] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
-  const sentinelRef = useRef(null);
-  const observerRef = useRef(null);
+  const [hero, setHero] = useState(null);
 
   useEffect(() => {
-    let alive = true;
-    async function run() {
-      setLoading(true);
-      setError("");
+    async function loadHero() {
       try {
-        const { data } = await api.get("/movies", { params: { page: 1, limit: PAGE_LIMIT } });
-        if (!alive) return;
-        const firstPageMovies = data?.movies || [];
-        const pages = Number(data?.totalPages || 1);
-        setMovies(firstPageMovies);
-        setPage(1);
-        setTotalPages(pages);
-        setHasMore(1 < pages);
+        const { data } = await api.get("/movies/trending");
+        if (data?.movies?.length > 0) {
+          setHero(data.movies[0]);
+        }
       } catch (err) {
-        if (!alive) return;
-        setMovies([]);
-        setError(err?.response?.data?.message || "Failed to load homepage movies.");
-      } finally {
-        if (alive) setLoading(false);
+        console.error("Hero failed", err);
       }
     }
-    run();
-    return () => {
-      alive = false;
-    };
+    loadHero();
   }, []);
 
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    if (observerRef.current) observerRef.current.disconnect();
-
-    observerRef.current = new IntersectionObserver(
-      async (entries) => {
-        const first = entries[0];
-        if (!first?.isIntersecting || loading || loadingMore || !hasMore) return;
-        const nextPage = page + 1;
-        if (nextPage > totalPages) {
-          setHasMore(false);
-          return;
-        }
-
-        setLoadingMore(true);
-        try {
-          const { data } = await api.get("/movies", { params: { page: nextPage, limit: PAGE_LIMIT } });
-          const nextMovies = data?.movies || [];
-          setMovies((prev) => [...prev, ...nextMovies]);
-          setPage(nextPage);
-          setHasMore(nextPage < Number(data?.totalPages || totalPages));
-        } catch (err) {
-          setError(err?.response?.data?.message || "Failed to load more movies.");
-        } finally {
-          setLoadingMore(false);
-        }
-      },
-      { root: null, rootMargin: "300px", threshold: 0 }
-    );
-
-    observerRef.current.observe(sentinelRef.current);
-    return () => observerRef.current?.disconnect();
-  }, [hasMore, loading, loadingMore, page, totalPages]);
-
-  const featured = movies.find((m) => m.featured) || movies[0];
   return (
-    <div className="space-y-8">
-      {featured && (
-        <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative overflow-hidden rounded-3xl">
-          <img src={featured.posterUrl} className="h-[380px] w-full object-cover opacity-60" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black to-transparent p-8">
-            <h1 className="text-4xl font-bold">{featured.title}</h1>
-            <p className="mt-2 max-w-xl text-slate-200">{featured.description}</p>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 pb-12">
+      {hero && (
+        <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative overflow-hidden rounded-3xl mb-8">
+          <img src={hero.backdropUrl || hero.posterUrl} className="h-[50vh] w-full object-cover opacity-60" alt={hero.title} />
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent p-12 flex flex-col justify-end">
+            <h1 className="text-5xl font-extrabold text-white mb-4 drop-shadow-md">{hero.title}</h1>
+            <p className="max-w-2xl text-slate-200 text-lg line-clamp-3 mb-6 drop-shadow">{hero.description}</p>
+            <div className="flex gap-4">
+              <Link to={`/movies/${hero._id}`} className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-slate-200 transition">
+                Play Now
+              </Link>
+            </div>
           </div>
         </motion.section>
       )}
-      <section>
-        <h2 className="mb-4 text-2xl font-semibold">Trending Movies</h2>
-        {error && <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-red-200">{error}</div>}
-        {loading ? (
-          <LoadingSkeleton rows={4} />
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">{movies.map((m) => <MovieCard key={m._id} movie={m} />)}</div>
-            {loadingMore && <LoadingSkeleton rows={2} />}
-            <div ref={sentinelRef} className="h-4" />
-          </>
-        )}
-      </section>
-    </div>
+      
+      <MovieRow 
+        title="Trending Now" 
+        endpoint="/movies/trending" 
+      />
+      
+      <MovieRow 
+        title="Top Rated Movies" 
+        endpoint="/movies/top-rated" 
+      />
+      
+      <MovieRow 
+        title="Popular Movies" 
+        endpoint="/movies/popular" 
+      />
+      
+      <MovieRow 
+        title="Action Thrills" 
+        endpoint="/movies/genre/28" // 28 is Action in TMDB
+      />
+      
+      <MovieRow 
+        title="Sci-Fi & Fantasy" 
+        endpoint="/movies/genre/878" // 878 is Sci-Fi in TMDB
+      />
+    </motion.div>
   );
 }

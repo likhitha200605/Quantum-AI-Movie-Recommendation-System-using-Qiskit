@@ -11,6 +11,7 @@ import recommendationRoutes from "./routes/recommendationRoutes.js";
 import trackRoutes from "./routes/trackRoutes.js";
 import userDashboardRoutes from "./routes/userDashboardRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import watchlistRoutes from "./routes/watchlistRoutes.js";
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/track", trackRoutes);
 app.use("/api/user", userDashboardRoutes);
+app.use("/api/watchlist", watchlistRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

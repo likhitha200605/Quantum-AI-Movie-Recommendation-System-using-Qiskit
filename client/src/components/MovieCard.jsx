@@ -20,7 +20,7 @@ export default function MovieCard({ movie }) {
   useEffect(() => {
     let alive = true;
     async function loadRating() {
-      if (!movie?._id || String(movie._id).startsWith("tmdb-")) return;
+      if (!movie?._id) return;
       try {
         const { data } = await api.get(`/ratings/${movie._id}`);
         if (!alive) return;
@@ -43,7 +43,7 @@ export default function MovieCard({ movie }) {
       alert("Please login to rate movies.");
       return;
     }
-    if (!movie?._id || String(movie._id).startsWith("tmdb-")) return;
+    if (!movie?._id) return;
 
     const previousRating = ratingsByMovieId[movie._id] ?? null;
     const previousTotal = totalRatings;

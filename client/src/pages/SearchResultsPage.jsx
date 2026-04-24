@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import LoadingSkeleton from "../components/LoadingSkeleton";
+import MovieCard from "../components/MovieCard";
 import api from "../services/api";
 
 function escapeRegex(value) {
@@ -78,16 +79,9 @@ export default function SearchResultsPage() {
       </p>
       {error && <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
       {!error && q && items.length === 0 && <div className="rounded-xl bg-white/5 p-4 text-slate-300">No results found.</div>}
-      <div className="grid gap-3">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {items.map((movie) => (
-          <Link
-            key={movie._id}
-            to={`/movies/${movie._id}`}
-            className="glass block rounded-xl border border-white/10 p-4 transition hover:border-violet-400/50"
-          >
-            <h3 className="font-semibold">{highlightMatch(movie.title, q)}</h3>
-            <p className="text-sm text-slate-300">{movie.year || "Year unavailable"}</p>
-          </Link>
+          <MovieCard key={movie._id} movie={movie} />
         ))}
       </div>
     </div>

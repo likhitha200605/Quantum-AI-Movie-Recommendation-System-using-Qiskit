@@ -1,25 +1,28 @@
 import { Router } from "express";
 import {
-  addToWatchlist,
-  getWatchlist,
-  listMovies,
+  popularMovies,
+  topRatedMovies,
+  trendingMovies,
+  genreMovies,
+  searchMovies,
   movieDetails,
   rateMovie,
-  removeFromWatchlist,
-  searchMovies,
-  suggestions,
+  genresList,
 } from "../controllers/movieController.js";
 import { auth } from "../middleware/auth.js";
 
 const router = Router();
 
-router.get("/", listMovies);
+// TMDB Native Endpoints
+router.get("/trending", trendingMovies);
+router.get("/popular", popularMovies);
+router.get("/top-rated", topRatedMovies);
+router.get("/genre/list", genresList);
+router.get("/genre/:id", genreMovies);
 router.get("/search", searchMovies);
-router.get("/suggestions", suggestions);
-router.get("/watchlist", auth, getWatchlist);
+
+// Movie details & interactions
 router.get("/:id", movieDetails);
 router.post("/rate", auth, rateMovie);
-router.post("/watchlist", auth, addToWatchlist);
-router.delete("/watchlist", auth, removeFromWatchlist);
 
 export default router;

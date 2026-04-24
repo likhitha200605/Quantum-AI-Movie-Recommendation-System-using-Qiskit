@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useWatchlist } from "../context/WatchlistContext";
 import LoadingSkeleton from "../components/LoadingSkeleton";
+import MovieCard from "../components/MovieCard";
 import api from "../services/api";
 
 export default function ProfilePage() {
@@ -96,7 +97,11 @@ export default function ProfilePage() {
       {loadingWatchlist ? (
         <LoadingSkeleton rows={2} />
       ) : (
-        <div className="grid gap-3 md:grid-cols-3">{watchlist.map((m) => <div key={m._id} className="glass rounded-xl p-3">{m.title}</div>)}</div>
+        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
+          {watchlist.map((m) => (
+            <MovieCard key={m._id} movie={m} />
+          ))}
+        </div>
       )}
     </div>
   );

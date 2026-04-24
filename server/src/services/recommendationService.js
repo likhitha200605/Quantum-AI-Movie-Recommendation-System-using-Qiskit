@@ -1,7 +1,7 @@
-import Movie from "../models/Movie.js";
 import Rating from "../models/Rating.js";
 import WatchHistory from "../models/WatchHistory.js";
 import { scoreQuantumSimilarity } from "./quantumService.js";
+import { fetchFromTmdb, formatTmdbMovie, getTmdbMovie, getGenreMap } from "../utils/tmdb.js";
 
 function normalize(vec) {
   const sum = Math.sqrt(vec.reduce((acc, v) => acc + v * v, 0));
@@ -15,9 +15,17 @@ function genreVector(genres, allGenres) {
 }
 
 export async function computeRecommendations(userId, knobs = {}) {
-  if (!userId) {
-    const trending = await Movie.find().sort({ trendingScore: -1, createdAt: -1 }).limit(16).lean();
-    return trending.map((movie, idx) => ({
+  // Fetch popular movies from TMDB as our candidate pool
+  const [pop1, pop2, genreMap] = await Promise.all([
+    fetchFromTmdb("/movie/popular", { page: 1 }),
+    fetchFromTmdb("/movie/popular", { page: 2 }),
+    getGenreMap()
+  ]);
+  const candidates = [...pop1.results, ...pop2.results].map(m => formatTmdbMovie(m, genreMap)).filter(Boolean);
+
+  if (!userId || userId === "guest") {
+    // Return top popular
+    return candidates.slice(0, 16).map((movie, idx) => ({
       ...movie,
       score: 1 - idx * 0.01,
       classicalScore: 1 - idx * 0.01,
@@ -27,38 +35,46 @@ export async function computeRecommendations(userId, knobs = {}) {
     }));
   }
 
-  const [movies, ratings, history] = await Promise.all([
-    Movie.find().lean(),
-    Rating.find({ user: userId }).populate("movie").lean(),
-    WatchHistory.find({ user: userId }).populate("movie").lean(),
+  const [ratings, history] = await Promise.all([
+    Rating.find({ user: userId }).lean(),
+    WatchHistory.find({ user: userId }).lean(),
   ]);
 
-  const allGenres = [...new Set(movies.flatMap((m) => m.genres || []))];
+  // Fetch full details for user's watched/rated movies
+  const watchedIds = new Set([
+    ...ratings.map(r => r.movie),
+    ...history.map(h => h.movie)
+  ]);
+  
+  const watchedMovies = (await Promise.all(
+    [...watchedIds].map(id => getTmdbMovie(id))
+  )).filter(Boolean);
+
+  const watchedMap = new Map(watchedMovies.map(m => [m._id, m]));
+
+  const allGenres = [...new Set([...candidates, ...watchedMovies].flatMap((m) => m.genres || []))];
+  
   const likedGenres = {};
   for (const r of ratings) {
-    for (const g of r.movie?.genres || []) likedGenres[g] = (likedGenres[g] || 0) + r.score;
+    const m = watchedMap.get(r.movie);
+    for (const g of m?.genres || []) likedGenres[g] = (likedGenres[g] || 0) + r.score;
   }
   for (const h of history) {
-    for (const g of h.movie?.genres || []) likedGenres[g] = (likedGenres[g] || 0) + h.minutesWatched / 60;
+    const m = watchedMap.get(h.movie);
+    for (const g of m?.genres || []) likedGenres[g] = (likedGenres[g] || 0) + h.minutesWatched / 60;
   }
 
   const userVector = normalize(allGenres.map((g) => likedGenres[g] || 0));
-  const watched = new Set([
-    ...ratings.map((r) => String(r.movie?._id)),
-    ...history.map((h) => String(h.movie?._id)),
-  ]);
-  const watchedTitles = [
-    ...new Set([...ratings.map((r) => r.movie?.title), ...history.map((h) => h.movie?.title)].filter(Boolean)),
-  ];
+  const watchedTitles = watchedMovies.map(m => m.title);
   const hasPreferenceSignal = userVector.some((value) => value > 0);
 
   const scored = [];
-  for (const movie of movies) {
-    if (watched.has(String(movie._id))) continue;
+  for (const movie of candidates) {
+    if (watchedIds.has(String(movie._id))) continue;
     const movieVector = genreVector(movie.genres || [], allGenres);
     const preferenceScore = userVector.reduce((acc, u, i) => acc + u * movieVector[i], 0);
-    // If user has no behavior signal yet, classical model falls back to popularity.
-    const popularityScore = ((movie.trendingScore || 0) / 100) * 0.7 + ((movie.ratingAvg || 0) / 5) * 0.3;
+    
+    const popularityScore = (movie.ratingAvg || 0) / 5;
     const classicalScore = hasPreferenceSignal ? preferenceScore : popularityScore;
     let quantum = { similarity: classicalScore };
     try {
@@ -83,17 +99,12 @@ export async function computeRecommendations(userId, knobs = {}) {
     return scored.slice(0, 16);
   }
 
-  // Fallback for small catalogs: still return ranked items so UI never appears "stuck".
-  return movies
-    .slice()
-    .sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0))
-    .slice(0, 16)
-    .map((movie, idx) => ({
+  return candidates.slice(0, 16).map((movie, idx) => ({
       ...movie,
       score: 1 - idx * 0.01,
       classicalScore: 1 - idx * 0.01,
       quantumScore: 1 - idx * 0.01,
-      explainability: "No unseen items left; showing strongest matches from your catalog.",
+      explainability: "No unseen items left; showing strongest matches from our popular catalog.",
       quantumMeta: { similarity: 1 - idx * 0.01, fallback: true },
-    }));
+  }));
 }
