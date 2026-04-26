@@ -114,10 +114,8 @@ export async function searchMovies(req, res) {
 export async function movieDetails(req, res) {
   try {
     let movieId = req.params.id;
-    // Handle our custom "tmdb-" prefix if it exists
-    if (movieId.startsWith("tmdb-")) {
-      movieId = movieId.replace("tmdb-", "");
-    }
+    // Handle our custom "tmdb-" or "tmdb_" prefix if it exists
+    movieId = String(movieId).replace(/^tmdb[-_]/, "");
 
     const cacheKey = `movieDetails:${movieId}`;
     let tmdbMovie;
@@ -202,8 +200,11 @@ export async function rateMovie(req, res) {
 
 export async function addToWatchlist(req, res) {
   try {
-    const { movieId } = req.body;
+    let { movieId } = req.body;
     if (!movieId) return res.status(400).json({ message: "movieId is required" });
+
+    movieId = String(movieId).replace(/^tmdb[-_]/, "");
+    movieId = `tmdb_${movieId}`;
 
     const watchlist = await Watchlist.findOneAndUpdate(
       { user: req.user.id },
@@ -211,7 +212,7 @@ export async function addToWatchlist(req, res) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    return res.json({ watchlist: watchlist.movies });
+    return res.json({ success: true, watchlist: watchlist.movies });
   } catch (err) {
     return res.status(500).json({ message: "Failed to add to watchlist", detail: err.message });
   }
@@ -219,8 +220,11 @@ export async function addToWatchlist(req, res) {
 
 export async function removeFromWatchlist(req, res) {
   try {
-    const { movieId } = req.params;
+    let { movieId } = req.params;
     if (!movieId) return res.status(400).json({ message: "movieId is required" });
+
+    movieId = String(movieId).replace(/^tmdb[-_]/, "");
+    movieId = `tmdb_${movieId}`;
 
     const watchlist = await Watchlist.findOneAndUpdate(
       { user: req.user.id },
@@ -228,7 +232,7 @@ export async function removeFromWatchlist(req, res) {
       { new: true }
     );
 
-    return res.json({ watchlist: watchlist?.movies || [] });
+    return res.json({ success: true, watchlist: watchlist?.movies || [] });
   } catch (err) {
     return res.status(500).json({ message: "Failed to remove from watchlist", detail: err.message });
   }

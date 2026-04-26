@@ -4,12 +4,15 @@ import Rating from "../models/Rating.js";
 
 export async function upsertRating(req, res) {
   try {
-    const { movieId, rating } = req.body;
+    let { movieId, rating } = req.body;
     const score = Number(rating);
 
     if (!movieId || score < 1 || score > 5) {
       return res.status(400).json({ message: "movieId and rating (1-5) are required" });
     }
+
+    movieId = String(movieId).replace(/^tmdb[-_]/, "");
+    movieId = `tmdb_${movieId}`;
 
     await Rating.findOneAndUpdate(
       { user: req.user.id, movie: movieId },
@@ -31,6 +34,7 @@ export async function upsertRating(req, res) {
     const totalRatings = stats[0]?.totalRatings || 0;
 
     return res.json({
+      success: true,
       movieId,
       averageRating,
       totalRatings,
@@ -88,10 +92,13 @@ export async function getMovieRatings(req, res) {
 
 export async function removeRating(req, res) {
   try {
-    const { movieId } = req.params;
+    let { movieId } = req.params;
     if (!movieId) {
       return res.status(400).json({ message: "movieId is required" });
     }
+
+    movieId = String(movieId).replace(/^tmdb[-_]/, "");
+    movieId = `tmdb_${movieId}`;
 
     await Rating.findOneAndDelete({ user: req.user.id, movie: movieId });
 
@@ -109,6 +116,7 @@ export async function removeRating(req, res) {
     const totalRatings = stats[0]?.totalRatings || 0;
 
     return res.json({
+      success: true,
       movieId,
       averageRating,
       totalRatings,

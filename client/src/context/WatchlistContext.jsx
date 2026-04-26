@@ -18,7 +18,7 @@ export function WatchlistProvider({ children }) {
 
     setLoadingWatchlist(true);
     try {
-      const { data } = await api.get("/movies/watchlist");
+      const { data } = await api.get("/watchlist");
       setWatchlist(data?.watchlist || []);
     } catch {
       setWatchlist([]);
@@ -31,12 +31,45 @@ export function WatchlistProvider({ children }) {
     refreshWatchlist();
   }, [refreshWatchlist]);
 
-  const addMovieToWatchlist = useCallback(async (movieId) => {
-    const { data } = await api.post("/movies/watchlist", { movieId });
-    setWatchlist(data?.watchlist || []);
-    trackWatchlistAction({ userId: user?._id, movieId });
-    return data;
-  }, [user?._id]);
+  const addMovieToWatchlist = useCallback(async (movie) => {
+    const movieId = movie._id || movie.tmdbId || movie.id;
+    const formattedId = `tmdb_${String(movieId).replace(/^tmdb[-_]/, "")}`;
+    console.log("Sending watchlist:", formattedId);
+    
+    setWatchlist((prev) => {
+      if (prev.some(m => m._id === formattedId || m.id === formattedId)) return prev;
+      return [...prev, { ...movie, _id: formattedId }];
+    });
+
+    try {
+      await api.post("/watchlist", { movieId: formattedId });
+      trackWatchlistAction({ userId: user?._id, movieId: formattedId });
+    } catch (err) {
+      console.error(err);
+      alert("Action failed");
+      refreshWatchlist();
+      throw err;
+    }
+  }, [user?._id, refreshWatchlist]);
+
+  const removeMovieFromWatchlist = useCallback(async (movieId) => {
+    const formattedId = `tmdb_${String(movieId).replace(/^tmdb[-_]/, "")}`;
+    
+    setWatchlist((prev) => prev.filter(m => {
+      const mId = m._id || m.id || m.tmdbId;
+      const mFormattedId = `tmdb_${String(mId).replace(/^tmdb[-_]/, "")}`;
+      return mFormattedId !== formattedId;
+    }));
+
+    try {
+      await api.delete(`/watchlist/${formattedId}`);
+    } catch (err) {
+      console.error(err);
+      alert("Action failed");
+      refreshWatchlist();
+      throw err;
+    }
+  }, [refreshWatchlist]);
 
   const value = useMemo(
     () => ({
@@ -44,8 +77,9 @@ export function WatchlistProvider({ children }) {
       loadingWatchlist,
       refreshWatchlist,
       addMovieToWatchlist,
+      removeMovieFromWatchlist,
     }),
-    [watchlist, loadingWatchlist, refreshWatchlist, addMovieToWatchlist]
+    [watchlist, loadingWatchlist, refreshWatchlist, addMovieToWatchlist, removeMovieFromWatchlist]
   );
 
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;

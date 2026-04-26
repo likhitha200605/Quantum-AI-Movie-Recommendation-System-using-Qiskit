@@ -48,6 +48,11 @@ export function formatTmdbMovie(item, genreMap = {}) {
     resolvedGenres = item.genres.map(g => g.name || g.id);
   }
 
+  let topCast = [];
+  if (item.credits && item.credits.cast) {
+    topCast = item.credits.cast.slice(0, 5).map(c => c.name);
+  }
+
   return {
     _id: `tmdb-${item.id}`,
     tmdbId: item.id,
@@ -58,6 +63,8 @@ export function formatTmdbMovie(item, genreMap = {}) {
     backdropUrl: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : "",
     description: item.overview || "",
     ratingAvg: Number(item.vote_average || 0) / 2, // Scale 10 to 5
+    language: item.original_language || "en",
+    cast: topCast,
     source: "tmdb",
   };
 }
@@ -75,10 +82,7 @@ export async function fetchFromTmdb(endpoint, params = {}, cacheTtl = 300) {
 
 // Fetch a single movie by ID with cache
 export async function getTmdbMovie(movieId) {
-  let tmdbId = String(movieId);
-  if (tmdbId.startsWith("tmdb-")) {
-    tmdbId = tmdbId.replace("tmdb-", "");
-  }
+  let tmdbId = String(movieId).replace(/^tmdb[-_]/, "");
 
   // If the ID is a legacy MongoDB ObjectId (24 char hex), skip it.
   // This prevents TMDB from using parseInt and returning movie 69 ("Walk the Line")
@@ -91,7 +95,9 @@ export async function getTmdbMovie(movieId) {
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
   try {
-    const { data } = await tmdbClient.get(`/movie/${tmdbId}`);
+    const { data } = await tmdbClient.get(`/movie/${tmdbId}`, {
+      params: { append_to_response: "credits" }
+    });
     const formatted = formatTmdbMovie(data);
     cache.set(cacheKey, formatted, 3600);
     return formatted;
