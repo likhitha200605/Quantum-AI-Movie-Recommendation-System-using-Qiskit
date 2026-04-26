@@ -142,7 +142,12 @@ export async function movieDetails(req, res) {
       description: tmdbMovie.overview || "",
       ratingAvg: Number(tmdbMovie.vote_average || 0) / 2, // TMDB rating
       runtime: tmdbMovie.runtime,
-      cast: tmdbMovie.credits?.cast ? tmdbMovie.credits.cast.slice(0, 10).map(c => c.name) : [],
+      cast: tmdbMovie.credits?.cast ? tmdbMovie.credits.cast.slice(0, 5).map(c => ({
+        name: c.name,
+        profileUrl: c.profile_path ? `https://image.tmdb.org/t/p/w200${c.profile_path}` : null
+      })) : [],
+      language: tmdbMovie.original_language || "en",
+      release_date: tmdbMovie.release_date || "",
       trailerUrl: "",
       source: "tmdb",
     };
