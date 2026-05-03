@@ -1,5 +1,5 @@
 import Rating from "../models/Rating.js";
-import UserBehavior from "../models/UserBehavior.js";
+import Watchlist from "../models/Watchlist.js";
 import { getTmdbMovie } from "../utils/tmdb.js";
 
 function buildDefaultDashboard() {
@@ -9,29 +9,27 @@ function buildDefaultDashboard() {
     favoriteGenres: "N/A",
     avgRating: 0,
     personalizationScore: 0,
-    genreDistribution: {},
+    genreDistribution: [],
   };
 }
 
 async function computeDashboardForUser(userId) {
-  const [behavior, ratingDocs] = await Promise.all([
-    UserBehavior.findOne({ userId }).lean(),
-    Rating.find({ user: userId }).select("score").lean(),
+  const [ratingDocs, watchlistDoc] = await Promise.all([
+    Rating.find({ user: userId }).select("movie score").lean(),
+    Watchlist.findOne({ user: userId }).lean(),
   ]);
 
-  if (!behavior) return buildDefaultDashboard();
-
-  const watchlist = Array.isArray(behavior.watchlist) ? behavior.watchlist : [];
-  const trailerClicks = Array.isArray(behavior.trailerClicks) ? behavior.trailerClicks : [];
-  const moviesWatched = watchlist.length + trailerClicks.length;
-  const watchTime = trailerClicks.length * 2;
-
-  const watchedIds = [...new Set([...watchlist, ...trailerClicks].map((id) => String(id)))];
+  const ratedMovieIds = ratingDocs.map((r) => r.movie);
+  const watchlistMovieIds = watchlistDoc?.movies || [];
   
+  const watchedIds = [...new Set([...ratedMovieIds, ...watchlistMovieIds].map(String))];
+
+  if (watchedIds.length === 0) {
+    return buildDefaultDashboard();
+  }
+
   // Use TMDB API instead of local DB
-  const watchedMovies = watchedIds.length
-    ? (await Promise.all(watchedIds.map(id => getTmdbMovie(id)))).filter(Boolean)
-    : [];
+  const watchedMovies = (await Promise.all(watchedIds.map(id => getTmdbMovie(id)))).filter(Boolean);
 
   const genreMap = {};
   for (const movie of watchedMovies) {
@@ -48,13 +46,18 @@ async function computeDashboardForUser(userId) {
     ? ratings.reduce((acc, score) => acc + score, 0) / ratings.length
     : 0;
 
+  const genreDistributionArray = Object.entries(genreMap).map(([name, value]) => ({
+    name,
+    value,
+  }));
+
   return {
-    watchTime,
-    moviesWatched,
+    watchTime: watchedIds.length * 2,
+    moviesWatched: watchedIds.length,
     favoriteGenres,
     avgRating,
-    personalizationScore: Math.min(100, moviesWatched * 10),
-    genreDistribution: genreMap,
+    personalizationScore: Math.min(100, watchedIds.length * 10),
+    genreDistribution: genreDistributionArray,
   };
 }
 

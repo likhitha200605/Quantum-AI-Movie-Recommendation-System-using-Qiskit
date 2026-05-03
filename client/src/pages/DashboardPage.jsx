@@ -40,9 +40,13 @@ export default function DashboardPage() {
     };
   }, [user]);
 
+  const distArray = Array.isArray(data?.genreDistribution) 
+    ? data.genreDistribution 
+    : Object.entries(data?.genreDistribution || {}).map(([name, value]) => ({ name, value }));
+
   const chartData = {
-    labels: Object.keys(data?.genreDistribution || {}),
-    datasets: [{ data: Object.values(data?.genreDistribution || {}), backgroundColor: ["#8b5cf6", "#06b6d4", "#22c55e", "#eab308"] }],
+    labels: distArray.map(item => item.name),
+    datasets: [{ data: distArray.map(item => item.value), backgroundColor: ["#8b5cf6", "#06b6d4", "#22c55e", "#eab308"] }],
   };
 
   if (loadingUser || loading) return <LoadingSkeleton rows={6} />;
@@ -73,7 +77,7 @@ export default function DashboardPage() {
       </div>
       <div className="glass rounded-2xl p-4">
         <h3 className="mb-2 font-semibold">Genre Distribution</h3>
-        {Object.keys(data?.genreDistribution || {}).length ? (
+        {distArray.length > 0 ? (
           <Doughnut data={chartData} />
         ) : (
           <p className="text-slate-300">Start exploring movies 🎬</p>

@@ -1,6 +1,25 @@
 import mongoose from "mongoose";
 
 import Rating from "../models/Rating.js";
+import { getTmdbMovie } from "../utils/tmdb.js";
+
+async function getMergedRatingStats(movieId) {
+  const ratings = await Rating.find({ movie: movieId });
+  const totalRatings = ratings.length;
+  const dbAverageRating = totalRatings > 0 
+    ? ratings.reduce((sum, r) => sum + r.score, 0) / totalRatings 
+    : 0;
+
+  const tmdbMovie = await getTmdbMovie(movieId);
+  const tmdbRating = tmdbMovie ? tmdbMovie.ratingAvg : 0;
+
+  let finalRating = tmdbRating;
+  if (totalRatings > 0) {
+    finalRating = (tmdbRating + dbAverageRating) / 2;
+  }
+
+  return { averageRating: finalRating, totalRatings, dbAverageRating };
+}
 
 export async function upsertRating(req, res) {
   try {
@@ -20,25 +39,15 @@ export async function upsertRating(req, res) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const stats = await Rating.aggregate([
-      { $match: { movie: movieId } },
-      {
-        $group: {
-          _id: "$movie",
-          averageRating: { $avg: "$score" },
-          totalRatings: { $sum: 1 },
-        },
-      },
-    ]);
-    const averageRating = stats[0]?.averageRating || 0;
-    const totalRatings = stats[0]?.totalRatings || 0;
+    const stats = await getMergedRatingStats(movieId);
 
     return res.json({
       success: true,
       movieId,
-      averageRating,
-      totalRatings,
+      averageRating: stats.averageRating,
+      totalRatings: stats.totalRatings,
       yourRating: score,
+      userRating: score, // Added to match requirements explicitly
     });
   } catch (err) {
     return res.status(500).json({ message: "Failed to save rating", detail: err.message });
@@ -65,18 +74,7 @@ export async function getUserRatings(req, res) {
 export async function getMovieRatings(req, res) {
   try {
     const { movieId } = req.params;
-    const stats = await Rating.aggregate([
-      { $match: { movie: movieId } },
-      {
-        $group: {
-          _id: "$movie",
-          averageRating: { $avg: "$score" },
-          totalRatings: { $sum: 1 },
-        },
-      },
-    ]);
-    const averageRating = stats[0]?.averageRating || 0;
-    const totalRatings = stats[0]?.totalRatings || 0;
+    const stats = await getMergedRatingStats(movieId);
 
     let yourRating = null;
     if (req.user?.id) {
@@ -84,7 +82,13 @@ export async function getMovieRatings(req, res) {
       yourRating = userRating?.score ?? null;
     }
 
-    return res.json({ movieId, averageRating, totalRatings, yourRating });
+    return res.json({ 
+      movieId, 
+      averageRating: stats.averageRating, 
+      totalRatings: stats.totalRatings, 
+      yourRating,
+      userRating: yourRating
+    });
   } catch (err) {
     return res.status(500).json({ message: "Failed to fetch movie ratings", detail: err.message });
   }
@@ -97,30 +101,24 @@ export async function removeRating(req, res) {
       return res.status(400).json({ message: "movieId is required" });
     }
 
-    movieId = String(movieId).replace(/^tmdb[-_]/, "");
-    movieId = `tmdb_${movieId}`;
+    const rawId = String(movieId).replace(/^tmdb[-_]/, "");
+    const idUnderscore = `tmdb_${rawId}`;
+    const idDash = `tmdb-${rawId}`;
 
-    await Rating.findOneAndDelete({ user: req.user.id, movie: movieId });
+    await Rating.findOneAndDelete({ 
+      user: req.user.id, 
+      movie: { $in: [idUnderscore, idDash, rawId] } 
+    });
 
-    const stats = await Rating.aggregate([
-      { $match: { movie: movieId } },
-      {
-        $group: {
-          _id: "$movie",
-          averageRating: { $avg: "$score" },
-          totalRatings: { $sum: 1 },
-        },
-      },
-    ]);
-    const averageRating = stats[0]?.averageRating || 0;
-    const totalRatings = stats[0]?.totalRatings || 0;
+    const stats = await getMergedRatingStats(idUnderscore);
 
     return res.json({
       success: true,
-      movieId,
-      averageRating,
-      totalRatings,
+      movieId: idUnderscore,
+      averageRating: stats.averageRating,
+      totalRatings: stats.totalRatings,
       yourRating: null,
+      userRating: null,
       message: "Rating removed successfully",
     });
   } catch (err) {

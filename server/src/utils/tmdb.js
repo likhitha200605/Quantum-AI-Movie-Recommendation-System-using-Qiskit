@@ -98,7 +98,8 @@ export async function getTmdbMovie(movieId) {
     const { data } = await tmdbClient.get(`/movie/${tmdbId}`, {
       params: { append_to_response: "credits" }
     });
-    const formatted = formatTmdbMovie(data);
+    const genreMap = await getGenreMap();
+    const formatted = formatTmdbMovie(data, genreMap);
     cache.set(cacheKey, formatted, 3600);
     return formatted;
   } catch (err) {

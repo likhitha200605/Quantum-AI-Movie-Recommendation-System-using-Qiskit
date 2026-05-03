@@ -11,8 +11,8 @@ export default function MovieCard({ movie }) {
   const { user } = useAuth();
   const { ratingsByMovieId, loadingRatings, saveRating, removeRating } = useRatings();
   const { watchlist, addMovieToWatchlist, removeMovieFromWatchlist } = useWatchlist();
-  const [averageRating, setAverageRating] = useState(Number(movie?.ratingAvg || 0));
-  const [totalRatings, setTotalRatings] = useState(0);
+  const [averageRating, setAverageRating] = useState(Number(movie?.averageRating || movie?.ratingAvg || movie?.vote_average || 0));
+  const [totalRatings, setTotalRatings] = useState(Number(movie?.totalRatings || 0));
   const [hoverRating, setHoverRating] = useState(0);
   const [saving, setSaving] = useState(false);
   
@@ -41,8 +41,8 @@ export default function MovieCard({ movie }) {
         setTotalRatings(Number(data?.totalRatings || 0));
       } catch {
         if (!alive) return;
-        setAverageRating(Number(movie?.ratingAvg || 0));
-        setTotalRatings(0);
+        setAverageRating(Number(movie?.averageRating || movie?.ratingAvg || movie?.vote_average || 0));
+        setTotalRatings(Number(movie?.totalRatings || 0));
       }
     }
     loadRating();

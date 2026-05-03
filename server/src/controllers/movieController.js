@@ -228,12 +228,13 @@ export async function removeFromWatchlist(req, res) {
     let { movieId } = req.params;
     if (!movieId) return res.status(400).json({ message: "movieId is required" });
 
-    movieId = String(movieId).replace(/^tmdb[-_]/, "");
-    movieId = `tmdb_${movieId}`;
+    const rawId = String(movieId).replace(/^tmdb[-_]/, "");
+    const idUnderscore = `tmdb_${rawId}`;
+    const idDash = `tmdb-${rawId}`;
 
     const watchlist = await Watchlist.findOneAndUpdate(
       { user: req.user.id },
-      { $pull: { movies: movieId } },
+      { $pull: { movies: { $in: [idUnderscore, idDash, rawId] } } },
       { new: true }
     );
 

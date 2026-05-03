@@ -54,15 +54,15 @@ export function WatchlistProvider({ children }) {
 
   const removeMovieFromWatchlist = useCallback(async (movieId) => {
     const formattedId = `tmdb_${String(movieId).replace(/^tmdb[-_]/, "")}`;
-    
-    setWatchlist((prev) => prev.filter(m => {
-      const mId = m._id || m.id || m.tmdbId;
-      const mFormattedId = `tmdb_${String(mId).replace(/^tmdb[-_]/, "")}`;
-      return mFormattedId !== formattedId;
-    }));
 
     try {
       await api.delete(`/watchlist/${formattedId}`);
+      
+      setWatchlist((prev) => prev.filter(m => {
+        const mId = m._id || m.id || m.tmdbId;
+        const mFormattedId = `tmdb_${String(mId).replace(/^tmdb[-_]/, "")}`;
+        return mFormattedId !== formattedId;
+      }));
     } catch (err) {
       console.error(err);
       alert("Action failed");
