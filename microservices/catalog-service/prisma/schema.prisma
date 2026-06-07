@@ -1,0 +1,94 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  name             String
+  passwordHash     String         @map("password_hash")
+  role             String         @default("user")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  ratings          Rating[]
+  watchHistories   WatchHistory[]
+  watchlistItems   Watchlist[]
+
+  @@map("users")
+}
+
+model Movie {
+  id              String         @id @default(uuid())
+  title           String
+  year            Int
+  genres          String[]       // Array of genres
+  tags            String[]       // Query tags
+  poster          String?
+  trailer         String?
+  cast            String[]
+  trendingScore   Float          @default(0.0) @map("trending_score")
+  popularityScore Float          @default(0.0) @map("popularity_score")
+  streamUrl       String?        @map("stream_url")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  ratings         Rating[]
+  watchHistories  WatchHistory[]
+  watchlistItems  Watchlist[]
+
+  // Indexing for sorting by trending and popularity scores
+  @@index([trendingScore(sort: Desc)])
+  @@index([popularityScore(sort: Desc)])
+  @@map("movies")
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  movieId   String   @map("movie_id")
+  score     Int      // 1 to 5 scale
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  // Composite index for rapid lookup and integrity constraint
+  @@unique([userId, movieId])
+  @@index([movieId])
+  @@map("ratings")
+}
+
+model WatchHistory {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  movieId        String   @map("movie_id")
+  minutesWatched Float    @map("minutes_watched")
+  completed      Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie          Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([movieId])
+  @@map("watch_histories")
+}
+
+model Watchlist {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  movieId   String   @map("movie_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@map("watchlist")
+}

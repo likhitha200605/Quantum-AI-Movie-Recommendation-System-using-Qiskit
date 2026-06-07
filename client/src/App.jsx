@@ -1,0 +1,43 @@
+import { Suspense, lazy, useEffect } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import LoadingSkeleton from "./components/LoadingSkeleton";
+import { useAuth } from "./context/AuthContext";
+
+const HomePage = lazy(() => import("./pages/HomePage"));
+const MoviesPage = lazy(() => import("./pages/MoviesPage"));
+const RecommendationsPage = lazy(() => import("./pages/RecommendationsPage"));
+const QuantumLabPage = lazy(() => import("./pages/QuantumLabPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const MovieDetailsPage = lazy(() => import("./pages/MovieDetailsPage"));
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
+
+export default function App() {
+  const { loadMe } = useAuth();
+  useEffect(() => {
+    loadMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#07080a] text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+      <Navbar />
+      <main className="w-full">
+        <Suspense fallback={<div className="max-w-7xl mx-auto px-4 md:px-8 py-8"><LoadingSkeleton rows={6} /></div>}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/movies" element={<MoviesPage />} />
+            <Route path="/movies/:id" element={<MovieDetailsPage />} />
+            <Route path="/search" element={<SearchResultsPage />} />
+            <Route path="/recommendations" element={<RecommendationsPage />} />
+            <Route path="/quantum-lab" element={<QuantumLabPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Suspense>
+      </main>
+    </div>
+  );
+}
